@@ -30,55 +30,78 @@ CREATE TRIGGER increment_member_check_ins
     FOR EACH ROW
     EXECUTE FUNCTION increment_member_check_ins_func();
 
+-- =============================================
+-- PostgreSQL Trigger Implementation
+-- =============================================
+-- This trigger automatically increments the total_check_ins
+-- counter in the members table whenever a new attendance
+-- record is created.
 
--- ============================================================================
--- TRIGGER 2: Decrement total_check_ins on attendance delete (Bonus)
--- ============================================================================
--- This trigger decrements the counter when an attendance record is deleted
--- (useful for corrections)
-
--- Drop existing trigger and function if they exist
-DROP TRIGGER IF EXISTS decrement_member_check_ins ON attendance;
-DROP FUNCTION IF EXISTS decrement_member_check_ins_func();
-
--- Create the trigger function
-CREATE OR REPLACE FUNCTION decrement_member_check_ins_func()
+-- Step 1: Create the trigger function
+CREATE OR REPLACE FUNCTION increment_member_check_ins()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Decrement the total_check_ins for the member
+    -- Increment total_check_ins for the member
     UPDATE members
-    SET total_check_ins = GREATEST(total_check_ins - 1, 0),
-        updated_at = NOW()
-    WHERE id = OLD.member_id;
+    SET total_check_ins = total_check_ins + 1
+    WHERE id = NEW.member_id;
     
-    RETURN OLD;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- Create the trigger
-CREATE TRIGGER decrement_member_check_ins
-    AFTER DELETE ON attendance
-    FOR EACH ROW
-    EXECUTE FUNCTION decrement_member_check_ins_func();
+-- Step 2: Create the trigger
+DROP TRIGGER IF EXISTS attendance_insert_trigger ON attendance;
+
+CREATE TRIGGER attendance_insert_trigger
+AFTER INSERT ON attendance
+FOR EACH ROW
+EXECUTE FUNCTION increment_member_check_ins();
 
 
+-- =============================================
+-- SQLite Trigger Implementation (Alternative)
+-- =============================================
+-- If using SQLite instead of PostgreSQL, use this trigger:
+-- (Comment out the PostgreSQL version above)
 
+/*
+DROP TRIGGER IF EXISTS attendance_insert_trigger;
 
--- ============================================================================
--- VERIFICATION QUERIES
--- ============================================================================
--- Use these queries to verify that triggers are installed correctly
+CREATE TRIGGER attendance_insert_trigger
+AFTER INSERT ON attendance
+FOR EACH ROW
+BEGIN
+    UPDATE members
+    SET total_check_ins = total_check_ins + 1
+    WHERE id = NEW.member_id;
+END;
+*/
 
--- Check if triggers exist
-SELECT trigger_name, event_manipulation, event_object_table
-FROM information_schema.triggers
-WHERE trigger_schema = 'public'
-ORDER BY event_object_table, trigger_name;
+-- =============================================
+-- How to Apply This Trigger
+-- =============================================
+-- For PostgreSQL:
+--   1. Connect to your database: psql -U username -d database_name
+--   2. Run: \i triggers.sql
+--   Or: psql -U username -d database_name -f triggers.sql
+--
+-- For SQLite:
+--   1. Connect to your database: sqlite3 membership_system.db
+--   2. Run: .read triggers.sql
+--   Or: sqlite3 membership_system.db < triggers.sql
 
--- Check if functions exist
-SELECT routine_name, routine_type
-FROM information_schema.routines
-WHERE routine_schema = 'public'
-AND routine_type = 'FUNCTION'
-AND routine_name LIKE '%check_ins%' OR routine_name LIKE '%expire%'
-ORDER BY routine_name;
+-- =============================================
+-- Testing the Trigger
+-- =============================================
+-- Test with these SQL commands:
+--
+-- 1. Check current total_check_ins:
+--    SELECT id, name, total_check_ins FROM members WHERE id = 1;
+--
+-- 2. Insert a new attendance record:
+--    INSERT INTO attendance (member_id, check_in_time) 
+--    VALUES (1, CURRENT_TIMESTAMP);
+--
+-- 3. Verify total_check_ins was incremented:
+--    SELECT id, name, total_check_ins FROM members WHERE id = 1;
